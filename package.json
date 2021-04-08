@@ -6,6 +6,7 @@
   "type": "module",
   "devDependencies": {
     "http-server": "^0.12.3",
+    "linkedom": "^0.6.2",
     "mithril": "^2.0.4",
     "ospec": "^4.1.1"
   },
@@ -13,7 +14,7 @@
     "mithril": "^1"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "ospec test/test.js"
   },
   "repository": {
     "type": "git",

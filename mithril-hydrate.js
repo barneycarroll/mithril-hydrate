@@ -1,112 +1,122 @@
+// Native DOM interfaces which will be overwritten during hydration
+const methods = {
+  document : [
+    'createElement',
+    'createElementNS',
+    'createDocumentFragment',
+    'createTextNode',
+  ]
+    .map(key => [key, document[key]]),
+
+  node : [
+    'appendChild',
+    'insertBefore',
+  ]
+    .map(key => [key, Node.prototype[key]]),
+
+  textContent  : Object.getOwnPropertyDescriptor(Node.prototype, 'textContent'),
+  style        : Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'style'),
+  setAttribute : Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'setAttribute'),
+}
+
 const noop = () => {}
 
-const elementHandler = {  
-  get: (element, key) => (
-      key === 'setAttribute'             ? noop
-    : key === 'style'                    ? {setProperty: noop}
-    : typeof element[key] === 'function' ? element[key].bind(element)
-    :                                      Reflect.get(element, key)
-  ),
-}
+export function hydrate(dom, vnodes, callback){
+  if(dom.hydrated)
+    return m.render.apply(this, arguments)
 
-const documentMethods = [
-  'createElement',
-  'createElementNS',
-  'createDocumentFragment',
-  'createTextNode',
-]
-  .map(key => [key, document[key]])
-
-const nodeMethods = [
-  'appendChild',
-  'insertBefore',
-]
-  .map(key => [key, Node.prototype[key]])
-
-export function render(host){
-  if(typeof host.vnodes !== 'object'){
-    var hydrating = true
-    
-    host.vnodes = []
-
-    hijack(host)
-  }
-
-  m.render.apply(this, arguments)
+  if(!dom.vnodes)
+    // Otherwise Mithril nukes the contents
+    dom.vnodes = []
   
-  if(hydrating)
-    reinstate()
+  ingest(dom)
+
+  m.render(
+    dom,
+
+    m.fragment({oncreate: reinstate}, vnodes),
+
+    callback,
+  )
+
+  dom.vnodes = dom.vnodes[0].children
+
+  dom.hydrated = true
 }
 
-function hijack(host){
-  nodeMethods.forEach(([key, method]) => {
+export function dessicate(dom, vnodes){
+  try {
+    m.render(
+      dom, 
+      
+      m.fragment({
+        oncreate(){
+          throw null
+        },
+      },
+        vnodes,
+      ),
+    )
+  }
+  finally {
+    return dom.innerHTML
+  }
+}
+
+function ingest(dom){
+  // Most DOM manipulation mechanisms are simply no-op'd
+  methods.node.forEach(([key]) => {
     Node.prototype[key] = noop
   })
 
-  const walker = document.createTreeWalker(host)
+  Object.defineProperty(HTMLElement.prototype, 'style', {
+    get: () => ({}),
+    set: noop,
+  })
 
-  document.createDocumentFragment = () => {
-    console.log('createDocumentFragment')
-    
+  HTMLElement.prototype.setAttribute = noop
+
+  const walker = document.createTreeWalker(dom)
+
+  Object.defineProperty(Node.prototype.textContent, {set(){
+    walker.nextNode()
+  }})
+
+  document.createDocumentFragment = () =>
+    walker.currentNode
+
+  document.createTextNode = input => {
+    walker.nextNode()
+
+    if(!input.length){
+      node.before(input)
+
+      walker.previousNode()
+    }
+
+    else if(walker.currentNode.nodeValue.length > input.length){
+      walker.currentNode.splitText(input.length)
+    }
+
     return walker.currentNode
   }
 
-  document.createTextNode = input => {
-    console.log('createTextNode ' + input)
-    
-    let node = walker.nextNode()
-
-    if(node.nodeType !== node.TEXT_NODE){
-      console.log('mismatch')
-      
-      node = walker.nextNode()
-    }
-
-    if(!input.length){
-      console.log('zero-width')
-      
-      node.before(input)
-    }
-
-    else if(node.nodeValue.length > input.length){
-      console.log('length disparity')
-      
-      node.splitText(input.length)
-    }
-
-    return node
-  }
-
-  document.createElement = document.createElementNS = input => {
-    console.log('createElement ' + input)
-    
-    return new Proxy(walker.nextNode(), elementHandler)
-  }
-  
-  elementHandler.set = (element, key, value) => {
-    if(key === 'textContent'){
-      walker.nextNode()
-    }
-    
-    return value
-  }
+  document.createElement = document.createElementNS = input =>
+    walker.nextNode()
 }
 
 function reinstate(){
   Object.assign(document,
-    Object.fromEntries(documentMethods)
+    Object.fromEntries(methods.document)
   )
 
   Object.assign(Node.prototype,
-    Object.fromEntries(nodeMethods)
+    Object.fromEntries(methods.node)
   )
-    
-  delete elementHandler.set
 
-  elementHandler.get = (element, key) =>
-      typeof element[key] === 'function'
-    ?
-      element[key].bind(element)
-    :
-      Reflect.get(element, key)
+  Object.defineProperty(Node.prototype,        'textContent',  methods.textContent)
+
+  Object.defineProperty(HTMLElement.prototype, 'style',        methods.style)
+
+  Object.defineProperty(HTMLElement.prototype, 'setAttribute', methods.setAttribute)
 }
