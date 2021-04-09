@@ -1,25 +1,22 @@
-// Native DOM interfaces which will be overwritten during hydration
-const methods = {
-  document : [
-    'createElement',
-    'createElementNS',
-    'createDocumentFragment',
-    'createTextNode',
-  ]
-    .map(key => [key, document[key]]),
-
-  node : [
-    'appendChild',
-    'insertBefore',
-  ]
-    .map(key => [key, Node.prototype[key]]),
-
-  textContent  : Object.getOwnPropertyDescriptor(Node.prototype, 'textContent'),
-  style        : Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'style'),
-  setAttribute : Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'setAttribute'),
+export function dessicate(dom, vnodes){
+  try {
+    m.render(
+      dom, 
+      
+      m.fragment({
+        oncreate(){
+          // Abort before the oncreate phase executes for the subtree
+          throw null
+        },
+      },
+        vnodes,
+      ),
+    )
+  }
+  finally {
+    return dom.innerHTML
+  }
 }
-
-const noop = () => {}
 
 export function hydrate(dom, vnodes, callback){
   if(dom.hydrated)
@@ -44,79 +41,71 @@ export function hydrate(dom, vnodes, callback){
   dom.hydrated = true
 }
 
-export function dessicate(dom, vnodes){
-  try {
-    m.render(
-      dom, 
-      
-      m.fragment({
-        oncreate(){
-          throw null
-        },
-      },
-        vnodes,
-      ),
-    )
-  }
-  finally {
-    return dom.innerHTML
-  }
-}
-
 function ingest(dom){
+  // Native DOM interfaces which will be overwritten during hydration
+  const methods = [
+    [Document,    'createElement'         ],
+    [Document,    'createElementNS'       ],
+    [Document,    'createDocumentFragment'],
+    [Document,    'createTextNode'        ],
+    [Node,        'appendChild'           ],
+    [Node,        'insertBefore'          ],
+    [Node,        'textContent'           ],
+    [HTMLElement, 'setAttribute'          ],
+    [HTMLElement, 'style'                 ],
+  ]
+    .map(([interface, key]) => [
+      interface, key,
+      Object.getOwnPropertyDescriptor(interface.prototype, key),
+    ])
+
   // Most DOM manipulation mechanisms are simply no-op'd
-  methods.node.forEach(([key]) => {
-    Node.prototype[key] = noop
+  methods.forEach(([interface, key]) => {
+    Object.defineProperty(interface.prototype, key, {get(){}})
   })
 
   Object.defineProperty(HTMLElement.prototype, 'style', {
     get: () => ({}),
-    set: noop,
+    set(){},
   })
-
-  HTMLElement.prototype.setAttribute = noop
 
   const walker = document.createTreeWalker(dom)
 
   Object.defineProperty(Node.prototype.textContent, {set(){
     walker.nextNode()
   }})
-
-  document.createDocumentFragment = () =>
+  
+  Document.prototype.createDocumentFragment = () =>
     walker.currentNode
 
-  document.createTextNode = input => {
+  Document.prototype.createElement = document.createElementNS = () =>
     walker.nextNode()
 
-    if(!input.length){
-      node.before(input)
+  const {createTextNode} = Document.prototype
 
-      walker.previousNode()
-    }
+  Document.prototype.createTextNode = input => {
+    if(input.length === 0)
+      return createTextNode.call(this, input)
+      
+    walker.nextNode()
 
-    else if(walker.currentNode.nodeValue.length > input.length){
+    if(walker.currentNode.nodeValue.length > input.length){
       walker.currentNode.splitText(input.length)
     }
 
     return walker.currentNode
   }
+  
+  const {appendChild} = Node.prototype
 
-  document.createElement = document.createElementNS = input =>
-    walker.nextNode()
+  Node.prototype.appendChild = input => {
+    if(input.nodeType === input.TEXT_NODE && input.nodeValue.length === 0)
+      return appendChild.call(this, input)
+  } 
 }
 
 function reinstate(){
-  Object.assign(document,
-    Object.fromEntries(methods.document)
-  )
-
-  Object.assign(Node.prototype,
-    Object.fromEntries(methods.node)
-  )
-
-  Object.defineProperty(Node.prototype,        'textContent',  methods.textContent)
-
-  Object.defineProperty(HTMLElement.prototype, 'style',        methods.style)
-
-  Object.defineProperty(HTMLElement.prototype, 'setAttribute', methods.setAttribute)
+  methods.forEach(([interface, key, descriptor]) => {
+    Object.defineProperty(interface.prototype, key, descriptor)
+  })
 }
