@@ -77,8 +77,8 @@ function ingest(dom){
 
   Object.defineProperties(Node.prototype, {
     textContent: {set(){ walker.nextNode() }},
-    appendChild: {get: () => input => {
-      if(input.nodeType === input.TEXT_NODE && input.nodeValue.length === 0)
+    appendChild: {get: () => function(input){
+      if(input && input.nodeType === input.TEXT_NODE && input.nodeValue.length === 0)
         return appendChild.call(this, input)
     }}
   })
@@ -87,7 +87,7 @@ function ingest(dom){
     createDocumentFragment: {get: () => () => walker.currentNode},
     createElement         : {get: () => () => walker.nextNode() },
     createElementNS       : {get: () => () => walker.nextNode() },
-    createTextNode        : {get: () => input => {
+    createTextNode        : {get: () => function(input){
       if(input.length === 0)
         return createTextNode.call(this, input)
         
