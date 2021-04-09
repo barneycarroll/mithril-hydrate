@@ -54,14 +54,14 @@ function ingest(dom){
     [HTMLElement, 'setAttribute'          ],
     [HTMLElement, 'style'                 ],
   ]
-    .map(([interface, key]) => [
-      interface, key,
-      Object.getOwnPropertyDescriptor(interface.prototype, key),
+    .map(([constructor, key]) => [
+      constructor, key,
+      Object.getOwnPropertyDescriptor(constructor.prototype, key),
     ])
 
   // Most DOM manipulation mechanisms are simply no-op'd
-  methods.forEach(([interface, key]) => {
-    Object.defineProperty(interface.prototype, key, {get(){}})
+  methods.forEach(([constructor, key]) => {
+    Object.defineProperty(constructor.prototype, key, {get(){}})
   })
 
   Object.defineProperty(HTMLElement.prototype, 'style', {
@@ -71,7 +71,7 @@ function ingest(dom){
 
   const walker = document.createTreeWalker(dom)
 
-  Object.defineProperty(Node.prototype.textContent, {set(){
+  Object.defineProperty(Node.prototype, 'textContent', {set(){
     walker.nextNode()
   }})
   
@@ -105,7 +105,7 @@ function ingest(dom){
 }
 
 function reinstate(){
-  methods.forEach(([interface, key, descriptor]) => {
-    Object.defineProperty(interface.prototype, key, descriptor)
+  methods.forEach(([constructor, key, descriptor]) => {
+    Object.defineProperty(constructor.prototype, key, descriptor)
   })
 }
