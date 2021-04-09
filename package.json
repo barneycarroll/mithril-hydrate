@@ -6,7 +6,7 @@
   "type": "module",
   "devDependencies": {
     "http-server": "^0.12.3",
-    "linkedom": "^0.6.2",
+    "jsdom": "^16.5.2",
     "mithril": "^2.0.4",
     "ospec": "^4.1.1"
   },
