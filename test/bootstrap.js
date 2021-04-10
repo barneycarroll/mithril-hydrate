@@ -3,10 +3,10 @@ import {createRequire} from 'module'
 
 const require = createRequire(import.meta.url)
 
-const { JSDOM } = require('jsdom')
+const {JSDOM} = require('jsdom')
 
-export default input => {
-  const dom = new JSDOM(input)
+export default html => {
+  const dom = new JSDOM(html)
 
   Object.assign(globalThis, dom, {
     window                : dom.window, 

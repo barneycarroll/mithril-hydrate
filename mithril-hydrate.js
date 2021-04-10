@@ -19,6 +19,30 @@ export function dessicate(dom, vnodes){
 }
 
 export function hydrate(dom, vnodes, callback){
+  // 
+  const {Document, Node, Element, HTMLElement} = window
+
+  // Native DOM interfaces which will be overwritten then reinstated during hydration:
+  // a tuple of prototype, property key, descriptor          
+  const interfaces = [
+    [Document,    'createElement'         ],
+    [Document,    'createElementNS'       ],
+    [Document,    'createDocumentFragment'],
+    [Document,    'createTextNode'        ],
+    [Node,        'appendChild'           ],
+    [Node,        'insertBefore'          ],
+    [Node,        'textContent'           ],
+    [Element,     'setAttribute'          ],
+    [HTMLElement, 'style'                 ],
+  ]
+    .map(([{prototype}, key]) => [
+      prototype, key,
+      Object.getOwnPropertyDescriptor(prototype, key),
+    ])
+  
+  const {appendChild}    = Node.prototype
+  const {createTextNode} = Document.prototype
+
   if(dom.hydrated)
     return m.render.apply(this, arguments)
 
@@ -39,71 +63,51 @@ export function hydrate(dom, vnodes, callback){
   dom.vnodes = dom.vnodes[0].children
 
   dom.hydrated = true
-}
 
-function ingest(dom){
-  const {Document, Node, HTMLElement} = window
+  return
 
-  // Native DOM interfaces which will be overwritten during hydration
-  const methods = [
-    [Document,    'createElement'         ],
-    [Document,    'createElementNS'       ],
-    [Document,    'createDocumentFragment'],
-    [Document,    'createTextNode'        ],
-    [Node,        'appendChild'           ],
-    [Node,        'insertBefore'          ],
-    [Node,        'textContent'           ],
-    [HTMLElement, 'setAttribute'          ],
-    [HTMLElement, 'style'                 ],
-  ]
-    .map(([constructor, key]) => [
-      constructor, key,
-      Object.getOwnPropertyDescriptor(constructor.prototype, key),
-    ])
-  
-  const {appendChild}    = Node.prototype
-  const {createTextNode} = Document.prototype
+  function ingest(dom){
+    const walker = document.createTreeWalker(dom)
 
-  // Most DOM manipulation mechanisms are simply no-op'd
-  methods.forEach(([constructor, key]) => {
-    Object.defineProperty(constructor.prototype, key, {get(){}})
-  })
+    // Most DOM manipulation mechanisms are simply no-op'd
+    interfaces.forEach(([prototype, key]) => {
+      Object.defineProperty(prototype, key, {get(){}})
+    })
 
-  Object.defineProperty(HTMLElement.prototype, 'style', {
-    get: () => ({}),
-  })
+    Object.defineProperty(HTMLElement.prototype, 'style', {
+      get: () => ({}),
+    })
 
-  const walker = document.createTreeWalker(dom)
+    Object.defineProperties(Node.prototype, {
+      textContent: {set(){ walker.nextNode() }},
+      appendChild: {get: () => function(input){
+        if(input && input.nodeType === input.TEXT_NODE && input.nodeValue.length === 0)
+          return appendChild.call(this, input)
+      }}
+    })
+    
+    Object.defineProperties(Document.prototype, {
+      createDocumentFragment: {get: () => () => walker.currentNode},
+      createElement         : {get: () => () => walker.nextNode() },
+      createElementNS       : {get: () => () => walker.nextNode() },
+      createTextNode        : {get: () => function(input){
+        if(input.length === 0)
+          return createTextNode.call(this, input)
+          
+        walker.nextNode()
+    
+        if(walker.currentNode.nodeValue.length > input.length){
+          walker.currentNode.splitText(input.length)
+        }
+    
+        return walker.currentNode
+      }}
+    })
+  }
 
-  Object.defineProperties(Node.prototype, {
-    textContent: {set(){ walker.nextNode() }},
-    appendChild: {get: () => function(input){
-      if(input && input.nodeType === input.TEXT_NODE && input.nodeValue.length === 0)
-        return appendChild.call(this, input)
-    }}
-  })
-  
-  Object.defineProperties(Document.prototype, {
-    createDocumentFragment: {get: () => () => walker.currentNode},
-    createElement         : {get: () => () => walker.nextNode() },
-    createElementNS       : {get: () => () => walker.nextNode() },
-    createTextNode        : {get: () => function(input){
-      if(input.length === 0)
-        return createTextNode.call(this, input)
-        
-      walker.nextNode()
-  
-      if(walker.currentNode.nodeValue.length > input.length){
-        walker.currentNode.splitText(input.length)
-      }
-  
-      return walker.currentNode
-    }}
-  })
-}
-
-function reinstate(){
-  methods.forEach(([constructor, key, descriptor]) => {
-    Object.defineProperty(constructor.prototype, key, descriptor)
-  })
+  function reinstate(){
+    interfaces.forEach(([prototype, key, descriptor]) => {
+      Object.defineProperty(prototype, key, descriptor)
+    })
+  }
 }
