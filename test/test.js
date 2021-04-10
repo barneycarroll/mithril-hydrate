@@ -15,9 +15,9 @@ const template = content => `
 
 bootstrap(template())
 
-import {dessicate} from '../mithril-hydrate.js?server'
+import {desiccate} from '../mithril-hydrate.js?server'
 
-const html = dessicate(document.body, m(Component))
+const html = desiccate(document.body, m(Component))
 
 bootstrap(template(html))
 
