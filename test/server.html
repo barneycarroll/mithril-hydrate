@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Mithril Hydrate Test - Server</title>
+</head>
+
+<body>
+  <script src=../node_modules/mithril/mithril.js></script>
+
+  <script type=module>
+    import {desiccate} from '../mithril-hydrate.js'
+    import Component from './Component.js'
+
+    parent.postMessage(
+      desiccate(document.body, m(Component)),
+      '*',
+    )
+  </script>
+</body>
+</html>

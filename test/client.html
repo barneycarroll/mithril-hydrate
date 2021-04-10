@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Mithril Hydrate Test - Client</title>
+</head>
+
+<body>
+  <script src=../node_modules/mithril/mithril.js></script>
+
+  <script type=module>
+    import {hydrate} from '../mithril-hydrate.js'
+    import Component from './Component.js'
+
+    document.body.innerHTML = (await event('message')).data
+
+    hydrate(document.body, m(Component))
+
+    function event(type, target = window){
+      return new Promise(resolve => {
+        target.addEventListener(type, resolve, {once:true})
+      })
+    }
+  </script>
+
+  <iframe src=./server.html></iframe>
+</body>
+</html>
